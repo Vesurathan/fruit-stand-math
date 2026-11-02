@@ -1,0 +1,485 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fruit Stand Math</title>
+<style>
+  /*
+    Layout concept: a fruit-stall counter fills the lower half of the screen;
+    the sky above holds the equation and the operation's live animation.
+    Each operation owns a fruit colour (apples=add, oranges=subtract,
+    limes=multiply, grapes=divide) so colour becomes a learnable signal,
+    not decoration.
+  */
+  :root{
+    --bg-top:#8fd6f6; --bg-bottom:#eaf8ff;
+    --stall:#b5793a; --stall-dark:#8a5a28; --stall-stripe:#f6ead7;
+    --surface:#fffaf0; --surface-2:#fff1d9;
+    --ink:#3a2a1d; --ink-soft:#6b5744;
+    --add:#e1483a; --sub:#f2a53c; --mul:#3f9d55; --div:#8e5fb0;
+    --good:#2f9e55; --bad:#d94f3c;
+    --ring: 0 0 0 3px color-mix(in srgb, var(--ink) 10%, transparent);
+    color-scheme: light;
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg-top:#0c2036; --bg-bottom:#132a44;
+      --stall:#6b4420; --stall-dark:#452a13; --stall-stripe:#8a5a2c;
+      --surface:#241a10; --surface-2:#2e2213;
+      --ink:#f3e8d8; --ink-soft:#c7b7a2;
+      --add:#ff6b5b; --sub:#ffbb5c; --mul:#5bcf78; --div:#b58af0;
+      --good:#49c470; --bad:#ff7a66;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg-top:#0c2036; --bg-bottom:#132a44;
+    --stall:#6b4420; --stall-dark:#452a13; --stall-stripe:#8a5a2c;
+    --surface:#241a10; --surface-2:#2e2213;
+    --ink:#f3e8d8; --ink-soft:#c7b7a2;
+    --add:#ff6b5b; --sub:#ffbb5c; --mul:#5bcf78; --div:#b58af0;
+    --good:#49c470; --bad:#ff7a66;
+    color-scheme: dark;
+  }
+
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    margin:0;
+    font-family:'Nunito', system-ui, sans-serif;
+    color:var(--ink);
+    background:linear-gradient(var(--bg-top), var(--bg-bottom));
+    padding-left:max(16px, env(safe-area-inset-left,0px));
+    padding-right:max(16px, env(safe-area-inset-right,0px));
+    overflow-x:hidden;
+  }
+  h1,h2,h3,.display{ font-family:'Baloo 2', 'Fredoka', system-ui, sans-serif; }
+
+  .app{ max-width:720px; margin:0 auto; min-height:100%; display:flex; flex-direction:column; padding-block:12px 24px; }
+
+  /* ---------- Top bar ---------- */
+  .topbar{
+    display:flex; align-items:center; justify-content:space-between; gap:10px;
+    min-height:44px;
+  }
+  .iconbtn{
+    appearance:none; border:none; cursor:pointer;
+    background:var(--surface); color:var(--ink);
+    width:44px; height:44px; border-radius:14px;
+    font-size:20px; display:flex; align-items:center; justify-content:center;
+    box-shadow: 0 2px 0 color-mix(in srgb, var(--ink) 18%, transparent);
+  }
+  .iconbtn:active{ transform:translateY(2px); box-shadow:none; }
+  .stats{ display:flex; gap:10px; }
+  .pill{
+    background:var(--surface); border-radius:999px; padding:8px 14px;
+    font-weight:800; display:flex; align-items:center; gap:6px; font-size:15px;
+    box-shadow: 0 2px 0 color-mix(in srgb, var(--ink) 18%, transparent);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ---------- Home screen ---------- */
+  #home{ flex:1; display:flex; flex-direction:column; gap:18px; padding-top:8px; }
+  #home h1{ font-size:clamp(28px,7vw,40px); margin:0; text-wrap:balance; text-align:center; }
+  #home p.sub{ margin:0; text-align:center; color:var(--ink-soft); font-size:16px; }
+  .opgrid{
+    display:grid; grid-template-columns:1fr 1fr; gap:14px;
+    margin-top:8px;
+  }
+  .opcard{
+    appearance:none; cursor:pointer; text-align:left;
+    border:none; border-radius:22px; padding:18px 16px;
+    color:#fff; position:relative; overflow:hidden;
+    min-height:120px; display:flex; flex-direction:column; justify-content:flex-end; gap:4px;
+    box-shadow: 0 4px 0 color-mix(in srgb, black 20%, transparent);
+  }
+  .opcard:active{ transform:translateY(3px); box-shadow:none; }
+  .opcard .sym{ position:absolute; top:10px; right:14px; font-size:34px; opacity:.5; font-family:'Baloo 2',sans-serif; }
+  .opcard .name{ font-family:'Baloo 2',sans-serif; font-size:22px; }
+  .opcard .hint{ font-size:13px; opacity:.9; }
+  .opcard.add{ background:linear-gradient(160deg, var(--add), color-mix(in srgb, var(--add) 70%, black)); }
+  .opcard.sub{ background:linear-gradient(160deg, var(--sub), color-mix(in srgb, var(--sub) 70%, black)); }
+  .opcard.mul{ background:linear-gradient(160deg, var(--mul), color-mix(in srgb, var(--mul) 70%, black)); }
+  .opcard.div{ background:linear-gradient(160deg, var(--div), color-mix(in srgb, var(--div) 70%, black)); }
+  .mixcard{
+    grid-column:1/-1; appearance:none; cursor:pointer; border:none; border-radius:22px;
+    padding:16px; color:#fff; font-family:'Baloo 2',sans-serif; font-size:20px;
+    background:linear-gradient(100deg, var(--add), var(--sub) 33%, var(--mul) 66%, var(--div));
+    box-shadow: 0 4px 0 color-mix(in srgb, black 20%, transparent);
+    display:flex; align-items:center; justify-content:center; gap:10px;
+  }
+  .mixcard:active{ transform:translateY(3px); box-shadow:none; }
+
+  .best{ text-align:center; color:var(--ink-soft); font-size:14px; min-height:18px; }
+
+  /* ---------- Game screen ---------- */
+  #game{ display:none; flex:1; flex-direction:column; gap:14px; }
+  #game.show{ display:flex; }
+  #home.hide{ display:none; }
+
+  .equation{
+    text-align:center; font-family:'Baloo 2',sans-serif;
+    font-size:clamp(30px,8vw,42px); font-variant-numeric:tabular-nums;
+    min-height:54px;
+  }
+  .equation .opcol{ padding:0 6px; }
+
+  .stage{
+    background:var(--surface);
+    border-radius:24px;
+    min-height:220px;
+    position:relative;
+    padding:16px;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:10px;
+    overflow:hidden;
+  }
+  .stall-floor{
+    position:absolute; left:0; right:0; bottom:0; height:16px;
+    background:repeating-linear-gradient(90deg, var(--stall-stripe) 0 18px, var(--stall) 18px 36px);
+  }
+  .baskets{ display:flex; gap:22px; align-items:flex-end; justify-content:center; flex-wrap:wrap; width:100%; }
+  .basket{
+    background:var(--surface-2); border:3px solid var(--stall);
+    border-radius:0 0 16px 16px; border-top:none;
+    padding:8px; min-width:72px; min-height:60px;
+    display:grid; grid-template-columns:repeat(auto-fill,minmax(20px,1fr)); gap:3px;
+    align-content:end; justify-items:center;
+  }
+  .basket .label{
+    grid-column:1/-1; text-align:center; font-size:11px; font-weight:800;
+    color:var(--ink-soft); margin-bottom:2px;
+  }
+  .fruit{
+    font-size:var(--fruit-size,20px); line-height:1; display:inline-block;
+    animation: pop .32s ease both;
+  }
+  .fruit.leaving{ animation: fly-away .5s ease forwards; }
+  @keyframes pop{ from{ transform:scale(0); opacity:0 } to{ transform:scale(1); opacity:1 } }
+  @keyframes fly-away{ to{ transform:translateY(-60px) translateX(30px) rotate(25deg); opacity:0 } }
+  .opsign{ font-family:'Baloo 2',sans-serif; font-size:30px; color:var(--ink-soft); align-self:center; }
+
+  .message{
+    min-height:26px; text-align:center; font-weight:800; font-size:16px;
+  }
+  .message.good{ color:var(--good); }
+  .message.bad{ color:var(--bad); }
+
+  .choices{
+    display:grid; grid-template-columns:1fr 1fr; gap:12px;
+  }
+  .choice{
+    appearance:none; cursor:pointer; border:none; border-radius:16px;
+    background:var(--surface); color:var(--ink);
+    font-family:'Baloo 2',sans-serif; font-size:26px; padding:16px 0;
+    box-shadow: 0 4px 0 color-mix(in srgb, var(--ink) 20%, transparent);
+    font-variant-numeric: tabular-nums;
+  }
+  .choice:active{ transform:translateY(3px); box-shadow:none; }
+  .choice.correct{ background:var(--good); color:#fff; }
+  .choice.wrong{ background:var(--bad); color:#fff; animation: shake .4s; }
+  .choice[disabled]{ opacity:.6; cursor:default; }
+  @keyframes shake{ 0%,100%{transform:translateX(0)} 25%{transform:translateX(-8px)} 75%{transform:translateX(8px)} }
+
+  .nextrow{ display:flex; justify-content:center; min-height:48px; }
+  .nextbtn{
+    appearance:none; cursor:pointer; border:none; border-radius:999px;
+    background:var(--ink); color:var(--surface); font-weight:800; font-size:16px;
+    padding:12px 26px; display:none; align-items:center; gap:8px;
+  }
+  .nextbtn.show{ display:inline-flex; }
+
+  .confetti{ position:fixed; inset:0; pointer-events:none; overflow:hidden; z-index:5; }
+  .confetti span{
+    position:absolute; top:-10px; width:9px; height:9px; border-radius:2px;
+    animation: fall 1.1s ease-in forwards;
+  }
+  @keyframes fall{ to{ transform:translateY(100vh) rotate(260deg); opacity:.2 } }
+
+  @media (prefers-reduced-motion: reduce){
+    .fruit, .fruit.leaving, .choice.wrong, .confetti span{ animation:none !important; }
+  }
+
+  @media (max-width:420px){
+    .opgrid{ grid-template-columns:1fr; }
+    .choices{ grid-template-columns:1fr 1fr; }
+  }
+</style>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@600;800&family=Nunito:wght@500;700;800&display=swap" rel="stylesheet">
+</head>
+<body>
+<div class="app">
+  <div class="topbar">
+    <button class="iconbtn" id="homeBtn" aria-label="Home" hidden>&#8592;</button>
+    <div></div>
+    <div class="stats">
+      <div class="pill">&#11088; <span id="scoreVal">0</span></div>
+      <div class="pill">&#128293; <span id="streakVal">0</span></div>
+    </div>
+  </div>
+
+  <div id="home">
+    <h1>Fruit Stand Math</h1>
+    <p class="sub">Pick a job at the stall and help count the fruit!</p>
+    <div class="opgrid">
+      <button class="opcard add" data-op="add"><span class="sym">+</span><span class="name">Delivery Day</span><span class="hint">Add crates together</span></button>
+      <button class="opcard sub" data-op="sub"><span class="sym">&minus;</span><span class="name">Selling Fruit</span><span class="hint">Take some away</span></button>
+      <button class="opcard mul" data-op="mul"><span class="sym">&times;</span><span class="name">Stacking Crates</span><span class="hint">Equal groups, fast</span></button>
+      <button class="opcard div" data-op="div"><span class="sym">&divide;</span><span class="name">Sharing Baskets</span><span class="hint">Split evenly</span></button>
+      <button class="mixcard" data-op="mix">&#127866; Mix It Up</button>
+    </div>
+    <p class="best" id="bestLine"></p>
+  </div>
+
+  <div id="game">
+    <div class="equation" id="equation"></div>
+    <div class="stage">
+      <div class="baskets" id="baskets"></div>
+      <div class="stall-floor"></div>
+    </div>
+    <div class="message" id="message">&nbsp;</div>
+    <div class="choices" id="choices"></div>
+    <div class="nextrow"><button class="nextbtn" id="nextBtn">Next one &#8594;</button></div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  var FRUITS = { add:'🍎', sub:'🍊', mul:'🍏', div:'🍇' };
+  var OP_LABEL = { add:'Delivery Day', sub:'Selling Fruit', mul:'Stacking Crates', div:'Sharing Baskets' };
+  var OP_SIGN = { add:'+', sub:'−', mul:'×', div:'÷' };
+  var GOOD_MSGS = ["Yes! Nicely counted.", "That's it!", "Fruit stand champion!", "Perfect count!", "You got it!"];
+  var RETRY_MSGS = ["Not quite — count again!", "Close! Try once more.", "Almost — look at the baskets again."];
+
+  var state = { op:null, a:0, b:0, answer:0, score:0, streak:0, locked:false, mix:false };
+
+  function store(key, val){
+    try{
+      if(val===undefined) return JSON.parse(localStorage.getItem(key));
+      localStorage.setItem(key, JSON.stringify(val));
+    }catch(e){ return val===undefined ? null : undefined; }
+  }
+
+  function rand(min,max){ return Math.floor(Math.random()*(max-min+1))+min; }
+
+  function generate(op){
+    var a,b,answer;
+    if(op==='add'){ a=rand(2,12); b=rand(2,12); answer=a+b; }
+    else if(op==='sub'){ a=rand(8,20); b=rand(1,a-1); answer=a-b; }
+    else if(op==='mul'){
+      a=rand(2,9); var maxB=Math.max(2, Math.floor(30/a)); b=rand(2, Math.min(9,maxB)); answer=a*b;
+    } else {
+      b=rand(2,9); var maxQ=Math.max(2, Math.floor(30/b)); answer=rand(2, Math.min(9,maxQ)); a=b*answer;
+    }
+    return {op:op, a:a, b:b, answer:answer};
+  }
+
+  function choicesFor(answer){
+    var set = new Set([answer]);
+    while(set.size<4){
+      var delta = rand(1,5) * (Math.random()<0.5?-1:1);
+      var cand = answer+delta;
+      if(cand>=0) set.add(cand);
+    }
+    var arr = Array.from(set);
+    for(var i=arr.length-1;i>0;i--){ var j=Math.floor(Math.random()*(i+1)); var t=arr[i]; arr[i]=arr[j]; arr[j]=t; }
+    return arr;
+  }
+
+  function basketEl(count, fruit, label){
+    var el = document.createElement('div');
+    el.className='basket';
+    var size = count>18 ? 14 : count>10 ? 17 : 22;
+    el.style.setProperty('--fruit-size', size+'px');
+    var lab=document.createElement('div'); lab.className='label'; lab.textContent=label;
+    el.appendChild(lab);
+    for(var i=0;i<count;i++){
+      var f=document.createElement('span'); f.className='fruit'; f.textContent=fruit;
+      f.style.animationDelay=(i*0.04)+'s';
+      el.appendChild(f);
+    }
+    return el;
+  }
+
+  function sign(el, text){ var s=document.createElement('div'); s.className='opsign'; s.textContent=text; el.appendChild(s); return s; }
+
+  function renderScene(q){
+    var baskets = document.getElementById('baskets');
+    baskets.innerHTML='';
+    var fruit = FRUITS[q.op];
+
+    if(q.op==='add'){
+      baskets.appendChild(basketEl(q.a, fruit, 'Crate A'));
+      sign(baskets, '+');
+      baskets.appendChild(basketEl(q.b, fruit, 'Crate B'));
+    } else if(q.op==='sub'){
+      var b = basketEl(q.a, fruit, 'On the table');
+      baskets.appendChild(b);
+      setTimeout(function(){
+        var items = b.querySelectorAll('.fruit');
+        for(var i=0;i<q.b && i<items.length;i++){
+          (function(idx){ setTimeout(function(){ items[items.length-1-idx].classList.add('leaving'); }, idx*120); })(i);
+        }
+      }, 300);
+    } else if(q.op==='mul'){
+      for(var g=0; g<q.a; g++){
+        var one = basketEl(0, fruit, 'Crate '+(g+1));
+        baskets.appendChild(one);
+        (function(basket, n){
+          setTimeout(function(){
+            for(var i=0;i<n;i++){
+              var f=document.createElement('span'); f.className='fruit'; f.textContent=fruit;
+              f.style.animationDelay=(i*0.04)+'s';
+              basket.appendChild(f);
+            }
+          }, g*180);
+        })(one, q.b);
+      }
+    } else if(q.op==='div'){
+      var groups=[];
+      for(var g2=0; g2<q.b; g2++){
+        var gb = basketEl(0, fruit, 'Basket '+(g2+1));
+        baskets.appendChild(gb);
+        groups.push(gb);
+      }
+      var total=q.a, placed=0;
+      (function deal(){
+        if(placed>=total) return;
+        var target = groups[placed % groups.length];
+        var f=document.createElement('span'); f.className='fruit'; f.textContent=fruit;
+        target.appendChild(f);
+        placed++;
+        setTimeout(deal, 90);
+      })();
+    }
+  }
+
+  function renderEquation(q){
+    document.getElementById('equation').innerHTML =
+      q.a + '<span class="opcol">'+OP_SIGN[q.op]+'</span>' + q.b + ' = ?';
+  }
+
+  function renderChoices(q){
+    var wrap = document.getElementById('choices');
+    wrap.innerHTML='';
+    var opts = choicesFor(q.answer);
+    opts.forEach(function(val){
+      var btn=document.createElement('button');
+      btn.className='choice'; btn.textContent=val;
+      btn.setAttribute('data-val', val);
+      btn.addEventListener('click', function(){ onAnswer(btn, val, q); });
+      wrap.appendChild(btn);
+    });
+  }
+
+  function confettiBurst(){
+    if(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    var colors=['var(--add)','var(--sub)','var(--mul)','var(--div)'];
+    var holder=document.createElement('div'); holder.className='confetti';
+    document.body.appendChild(holder);
+    for(var i=0;i<24;i++){
+      var s=document.createElement('span');
+      s.style.left=(Math.random()*100)+'vw';
+      s.style.background=colors[i%colors.length];
+      s.style.animationDelay=(Math.random()*0.3)+'s';
+      holder.appendChild(s);
+    }
+    setTimeout(function(){ holder.remove(); }, 1500);
+  }
+
+  function setMessage(text, cls){
+    var m=document.getElementById('message');
+    m.textContent=text||' ';
+    m.className='message'+(cls?(' '+cls):'');
+  }
+
+  function onAnswer(btn, val, q){
+    if(state.locked) return;
+    if(val===q.answer){
+      state.locked=true;
+      btn.classList.add('correct');
+      Array.from(document.getElementById('choices').children).forEach(function(b){ b.disabled=true; });
+      state.score++; state.streak++;
+      updateStats();
+      saveBest(q.op);
+      setMessage(GOOD_MSGS[rand(0,GOOD_MSGS.length-1)], 'good');
+      confettiBurst();
+      var nb=document.getElementById('nextBtn'); nb.classList.add('show');
+      clearTimeout(window.__autoNext);
+      window.__autoNext=setTimeout(startRound, 1700);
+    } else {
+      btn.classList.add('wrong');
+      btn.disabled=true;
+      state.streak=0;
+      updateStats();
+      setMessage(RETRY_MSGS[rand(0,RETRY_MSGS.length-1)], 'bad');
+      setTimeout(function(){ btn.classList.remove('wrong'); }, 420);
+    }
+  }
+
+  function updateStats(){
+    document.getElementById('scoreVal').textContent=state.score;
+    document.getElementById('streakVal').textContent=state.streak;
+  }
+
+  function saveBest(op){
+    var best = store('fsm_best') || {};
+    var key = state.mix ? 'mix' : op;
+    if(!best[key] || state.streak>best[key]) best[key]=state.streak;
+    store('fsm_best', best);
+  }
+
+  function startRound(){
+    document.getElementById('nextBtn').classList.remove('show');
+    clearTimeout(window.__autoNext);
+    state.locked=false;
+    var op = state.mix ? ['add','sub','mul','div'][rand(0,3)] : state.op;
+    var q = generate(op);
+    state.current=q;
+    renderEquation(q);
+    renderScene(q);
+    renderChoices(q);
+    setMessage('');
+  }
+
+  function showGame(op){
+    state.op=op; state.mix = (op==='mix'); state.score=0; state.streak=0;
+    updateStats();
+    document.getElementById('home').classList.add('hide');
+    document.getElementById('game').classList.add('show');
+    document.getElementById('homeBtn').hidden=false;
+    startRound();
+  }
+
+  function showHome(){
+    clearTimeout(window.__autoNext);
+    document.getElementById('game').classList.remove('show');
+    document.getElementById('home').classList.remove('hide');
+    document.getElementById('homeBtn').hidden=true;
+    state.score=0; state.streak=0; updateStats();
+    renderBest();
+  }
+
+  function renderBest(){
+    var best = store('fsm_best') || {};
+    var parts=[];
+    ['add','sub','mul','div','mix'].forEach(function(k){
+      if(best[k]) parts.push((OP_LABEL[k]||'Mix It Up')+': best streak '+best[k]);
+    });
+    document.getElementById('bestLine').textContent = parts.join('  ·  ');
+  }
+
+  document.querySelectorAll('.opcard,.mixcard').forEach(function(card){
+    card.addEventListener('click', function(){ showGame(card.getAttribute('data-op')); });
+  });
+  document.getElementById('homeBtn').addEventListener('click', showHome);
+  document.getElementById('nextBtn').addEventListener('click', startRound);
+
+  renderBest();
+})();
+</script>
+</body>
+</html>
